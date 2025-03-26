@@ -160,7 +160,7 @@ def attention(
             deterministic=deterministic,
             dtype=dtype,
             version=fa_version,
-        )
+        ).to(dtype)
     else:
         # if q_lens is not None or k_lens is not None:
             # warnings.warn(
