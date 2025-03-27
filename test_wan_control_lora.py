@@ -182,6 +182,15 @@ def main(args):
             depth_frames = torch.stack(depth_frames).unsqueeze(0).repeat(3, 1, 1, 1) # HW -> FHW -> CFHW
             control_pixels = depth_frames.to(dtype=torch.bfloat16, device=device)            
             # print('depth_frames.shape=',depth_frames.shape,control_pixels.shape)
+        else:
+            control_pixels = control_pixels.movedim(3, 1).unsqueeze(0) # FHWC -> FCHW -> BFCHW
+            transform = v2.Compose([
+                v2.ToDtype(torch.float32, scale=True),
+                v2.Resize(size=(height, width))
+            ])            
+            control_pixels = transform(control_pixels) * 2 - 1
+            control_pixels = torch.clamp(torch.nan_to_num(control_pixels), min=-1, max=1)
+            control_pixels = control_pixels[0].movedim(0, 1) # BFCHW -> FCHW -> CFHW            
 
         # control_pixels.shape== torch.Size([3, 65, 832, 480])
         # print('control_pixels.shape==',control_pixels.shape)    
@@ -345,7 +354,7 @@ def parse_args():
         "--control_preprocess",
         type = str,
         default = "tile",
-        choices=["tile","depth"],
+        choices=["tile","depth",'pose','no'],
         help = "Additional preprocessing to apply to control video, tile = blurred video for upscaling",
     )
     

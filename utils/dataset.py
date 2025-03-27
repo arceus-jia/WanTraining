@@ -26,6 +26,14 @@ IMAGE_TYPES = [".jpg", ".png"]
 VIDEO_TYPES = [".mp4", ".mkv", ".mov", ".avi", ".webm"]
 
 
+BUCKET_RESOLUTIONS_384 = {
+    "16x9": (512, 288),
+    "4x3":  (384, 288),
+    "1x1":  (384, 384),
+}
+
+
+
 BUCKET_RESOLUTIONS_624 = {
     "16x9": (832, 480),
     "4x3":  (704, 544),
@@ -79,6 +87,8 @@ class CombinedDataset(Dataset):
         
         if bucket_resolution == 960:
             self.bucket_resolution = BUCKET_RESOLUTIONS_960
+        elif bucket_resolution == 384:
+            self.bucket_resolution = BUCKET_RESOLUTIONS_384
         else:
             self.bucket_resolution = BUCKET_RESOLUTIONS_624
         
@@ -109,20 +119,22 @@ class CombinedDataset(Dataset):
                 tokens = new_tokens
             else:
                 return frames
-    
-    def __getitem__(self, idx):
-        ext = os.path.splitext(self.media_files[idx])[1].lower()
+
+    def get_media_item(self,media_file,width=None, height=None):
+        ext = os.path.splitext(media_file)[1].lower()
         if ext in IMAGE_TYPES:
-            image = Image.open(self.media_files[idx]).convert('RGB')
+            image = Image.open(media_file).convert('RGB')
             pixels = torch.as_tensor(np.array(image)).unsqueeze(0) # FHWC
             width, height = get_resolution(pixels.shape[2], pixels.shape[1], self.bucket_resolution)
         else:
-            vr = decord.VideoReader(self.media_files[idx])
+            vr = decord.VideoReader(media_file)
+
             orig_height, orig_width = vr[0].shape[:2]
             orig_frames = len(vr)
-            
-            width, height = get_resolution(orig_width, orig_height, self.bucket_resolution)
+            if width is None:
+                width, height = get_resolution(orig_width, orig_height, self.bucket_resolution)
             max_frames = self.find_max_frames(width, height)
+            print('max_frames',max_frames)
             stride = max(min(random.randint(1, self.max_frame_stride), orig_frames // max_frames), 1)
             
             # sample a clip from the video based on frame stride and length
@@ -155,9 +167,17 @@ class CombinedDataset(Dataset):
         pixels = pixels.movedim(3, 1).unsqueeze(0).contiguous() # FHWC -> FCHW -> BFCHW
         pixels = transform(pixels) * 2 - 1
         pixels = torch.clamp(torch.nan_to_num(pixels), min=-1, max=1)
+
+        return pixels,width,height
+    
+    def __getitem__(self, idx):
+        media_file = self.media_files[idx]
+        pixels,width,height = self.get_media_item(media_file)
         
         if self.load_control:
-            raise NotImplementedError("loading control files from disk is not implemented yet")
+            # raise NotImplementedError("loading control files from disk is not implemented yet")
+            control_media_file = media_file.replace('train/','train_control/')
+            control,_,_ = self.get_media_item(control_media_file,width,height)
         else:
             control = None
         
@@ -174,4 +194,4 @@ class CombinedDataset(Dataset):
         else:
             raise Exception(f"No embedding file found for {self.media_files[idx]}, you may need to precompute embeddings with --cache_embeddings")
         
-        return {"pixels": pixels, "embedding_dict": embedding_dict, "control": control}
+        return {"pixels": pixels, "embedding_dict": embedding_dict, "control": control,"media_file":media_file}

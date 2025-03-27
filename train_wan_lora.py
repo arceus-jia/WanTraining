@@ -175,6 +175,7 @@ def main(args):
         if os.path.exists(subfolder_path):
             val_dataset = subfolder_path
             break
+    print('val dataset ',val_dataset)
     
     if val_dataset is None:
         val_dataset = args.dataset
@@ -205,7 +206,8 @@ def main(args):
         pixels = [sample["pixels"][0].movedim(0, 1) for sample in batch] # BFCHW -> FCHW -> CFHW
         context = [sample["embedding_dict"]["context"] for sample in batch]
         control = [sample["control"][0].movedim(0, 1) for sample in batch] if args.load_control else None
-        return pixels, context, control
+        media_file = [sample["media_file"] for sample in batch]
+        return pixels, context, control,media_file
     
     train_dataloader = DataLoader(
         train_dataset,
@@ -409,12 +411,13 @@ def main(args):
         return control
     
     def prepare_conditions(batch):
-        pixels, context, control = batch
+        pixels, context, control,media_file = batch
         
         pixels  = [p.to(dtype=torch.bfloat16, device=device) for p in pixels]
         context = [c.to(dtype=torch.bfloat16, device=device) for c in context]
         
         latents = vae.encode(pixels)
+        print('latents.shape==',len(latents), latents[0].shape)
         noise = [torch.randn_like(l) for l in latents]
         
         sigmas = torch.rand(len(latents)).to(device)
@@ -441,6 +444,7 @@ def main(args):
             noisy = noise[i] * sigmas[i] + latents[i] * (1 - sigmas[i])
             
             if args.control_lora:
+                print('control_latents.shape',control_latents[0].shape, noisy.shape, media_file)
                 noisy = torch.cat([noisy, control_latents[i]], dim=0) # CFHW, so channel dim is 0
             
             noisy_model_input.append(noisy.to(torch.bfloat16))
@@ -649,7 +653,7 @@ def parse_args():
         "--control_preprocess",
         type = str,
         default = "tile",
-        choices=["tile", "depth"],
+        choices=["tile", "depth","pose"],
         help = "Preprocess to apply if not loading a control video",
     )
     parser.add_argument(
@@ -715,7 +719,7 @@ def parse_args():
         "--base_res",
         type = int,
         default = 624,
-        choices=[624, 960],
+        choices=[624, 960,384],
         help = "Base resolution bucket, resized to equal area based on aspect ratio",
     )
     parser.add_argument(
@@ -768,3 +772,7 @@ if __name__ == "__main__":
         main(args)
     else:
         raise Exception("--dataset is required but not provided")
+
+# python train_wan_lora.py --dataset /data/datasets/wan/gfp --cache_embeddings
+
+#  nohup python -u train_wan_lora.py --dataset /data/datasets/wan/gfp --max_train_steps 150000 --token_limit 6000  --val_steps 1000000 --checkpointing_steps 2000 --lora_rank 128 --control_lora --load_control --control_preprocess pose --base_res 624 > log.txt &
