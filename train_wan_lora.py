@@ -417,7 +417,7 @@ def main(args):
         context = [c.to(dtype=torch.bfloat16, device=device) for c in context]
         
         latents = vae.encode(pixels)
-        print('latents.shape==',len(latents), latents[0].shape)
+        # print('latents.shape==',len(latents), latents[0].shape)
         noise = [torch.randn_like(l) for l in latents]
         
         sigmas = torch.rand(len(latents)).to(device)
@@ -776,3 +776,5 @@ if __name__ == "__main__":
 # python train_wan_lora.py --dataset /data/datasets/wan/gfp --cache_embeddings
 
 #  nohup python -u train_wan_lora.py --dataset /data/datasets/wan/gfp --max_train_steps 150000 --token_limit 6000  --val_steps 1000000 --checkpointing_steps 2000 --lora_rank 128 --control_lora --load_control --control_preprocess pose --base_res 624 > log.txt &
+
+# nohup python -u train_wan_lora.py --dataset /data/datasets/wan/gfp --max_train_steps 150000 --token_limit 6000  --val_steps 1000000 --checkpointing_steps 3000 --lora_rank 128 --control_lora  --control_preprocess depth --base_res 624 > log.txt &

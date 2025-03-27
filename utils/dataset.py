@@ -134,7 +134,7 @@ class CombinedDataset(Dataset):
             if width is None:
                 width, height = get_resolution(orig_width, orig_height, self.bucket_resolution)
             max_frames = self.find_max_frames(width, height)
-            print('max_frames',max_frames)
+            # print('max_frames',max_frames)
             stride = max(min(random.randint(1, self.max_frame_stride), orig_frames // max_frames), 1)
             
             # sample a clip from the video based on frame stride and length
