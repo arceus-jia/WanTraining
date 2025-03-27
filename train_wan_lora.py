@@ -444,7 +444,7 @@ def main(args):
             noisy = noise[i] * sigmas[i] + latents[i] * (1 - sigmas[i])
             
             if args.control_lora:
-                print('control_latents.shape',control_latents[0].shape, noisy.shape, media_file)
+                # print('control_latents.shape',control_latents[0].shape, noisy.shape, media_file)
                 noisy = torch.cat([noisy, control_latents[i]], dim=0) # CFHW, so channel dim is 0
             
             noisy_model_input.append(noisy.to(torch.bfloat16))
