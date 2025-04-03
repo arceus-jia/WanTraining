@@ -126,6 +126,9 @@ def handle_single(depth_model, video_path, output_path):
             normalize=True,
             value_range=(-1, 1),
         )
+        
+        gc.collect()
+        torch.cuda.empty_cache()
         print("cost==", time.time() - st, f)
     except:
         import traceback
