@@ -157,6 +157,8 @@ if __name__ == "__main__":
     # num_workers = args.j
     num_gpus = torch.cuda.device_count()
     num_workers = num_gpus
+    #TODO: 4卡有问题目前
+    num_gpus = 2
 
     gpu_ids = [i for i in range(num_gpus) if torch.cuda.is_available()]
     print(f"avaliable gpu ids: {gpu_ids}")
