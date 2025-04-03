@@ -27,8 +27,9 @@ import time
 import argparse
 import concurrent.futures
 
+import numpy as np
 import decord
-decord.bridge.set_bridge("torch")
+# decord.bridge.set_bridge("torch")
 
 
 from wan.utils.utils import cache_video
@@ -80,59 +81,62 @@ def resize512(height, width):
 
 
 def handle_single(depth_model, video_path, output_path):
-
     try:
         device = next(depth_model.parameters()).device
-        decord.bridge.set_bridge("torch")
         st = time.time()
         print("handle==", video_path, device)
 
         vr = decord.VideoReader(video_path)
-        control_pixels = vr[:].to(device)
-        f, height, width, _ = control_pixels.shape
+        control_pixels_nd = vr[:]
+        control_pixels_np = control_pixels_nd.asnumpy()
+        f, height, width, _ = control_pixels_np.shape
         height, width = resize512(height, width)
 
-        depth_frames = []
-        # control_pixels = control_pixels.permute(3, 0, 1, 2) #FHWC->CFHW
-        control_pixels = control_pixels.movedim(3, 1).unsqueeze(
-            0
-        )  # FHWC -> FCHW -> BFCHW
-        transform = v2.Compose(
-            [v2.ToDtype(torch.float32, scale=True), v2.Resize(size=(height, width))]
-        )
+        # shape: (F, H, W, C)
+        control_pixels = torch.from_numpy(control_pixels_np).float()
 
-        control_pixels = transform(control_pixels).squeeze().movedim(0, 1)
-        for i in range(control_pixels.shape[1]):
-            d_input = (
-                control_pixels[:, i].movedim(0, -1).cpu().float().numpy() * 0.5 + 0.5
-            )  # CFHW -> CHW -> HWC
+        # (F, H, W, C) -> (F, C, H, W) -> (1, F, C, H, W)
+        control_pixels = control_pixels.movedim(3, 1).unsqueeze(0)
+
+        transform = v2.Compose([
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Resize(size=(height, width))
+        ])
+        control_pixels = transform(control_pixels).squeeze(0)  # 变成 (F, C, H, W)
+
+        depth_frames = []
+        # 遍历每一帧进行模型推理
+        for i in range(control_pixels.shape[0]):
+            d_input = control_pixels[i].movedim(0, -1).cpu().float().numpy() * 0.5 + 0.5
             depth = depth_model.infer_image(d_input)
-            depth = (depth - depth.min()) / (
-                depth.max() - depth.min()
-            )  # normalized to near=1, far=0
+            depth = (depth - depth.min()) / (depth.max() - depth.min())
+            # depth_frames.append(depth.cpu().numpy() * 2 - 1)
             depth_frames.append(depth * 2 - 1)
 
-        depth_frames = (
-            torch.stack(depth_frames).unsqueeze(0).repeat(3, 1, 1, 1)
-        )  # HW -> FHW -> CFHW
-        control_pixels = depth_frames.to(dtype=torch.bfloat16, device=device)
+        # depth_frames_np = np.stack(depth_frames, axis=0)
+        # depth_frames_tensor = torch.from_numpy(depth_frames_np).float()
+        depth_frames_tensor = torch.stack(depth_frames, dim=0) 
+
+        depth_frames_tensor = depth_frames_tensor.unsqueeze(0).repeat(3, 1, 1, 1)
+
+        depth_frames_tensor = depth_frames_tensor.to(device=device, dtype=torch.bfloat16)
 
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         cache_video(
-            tensor=control_pixels[None],
+            tensor=depth_frames_tensor[None],
             save_file=output_path,
             fps=16,
             nrow=1,
             normalize=True,
             value_range=(-1, 1),
         )
-        
+
         gc.collect()
         torch.cuda.empty_cache()
+
         print("cost==", time.time() - st, f)
     except:
         import traceback
-
         traceback.print_exc()
 
 
