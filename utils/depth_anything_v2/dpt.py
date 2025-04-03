@@ -157,7 +157,8 @@ class DepthAnythingV2(nn.Module):
         features=256, 
         out_channels=[256, 512, 1024, 1024], 
         use_bn=False, 
-        use_clstoken=False
+        use_clstoken=False,
+        device='cuda'
     ):
         super(DepthAnythingV2, self).__init__()
         
@@ -173,6 +174,8 @@ class DepthAnythingV2(nn.Module):
         
         self.depth_head = DPTHead(self.pretrained.embed_dim, features, use_bn, out_channels=out_channels, use_clstoken=use_clstoken)
     
+        self.device = device
+
     def forward(self, x):
         patch_h, patch_w = x.shape[-2] // 14, x.shape[-1] // 14
         
@@ -208,7 +211,6 @@ class DepthAnythingV2(nn.Module):
             NormalizeImage(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             PrepareForNet(),
         ])
-        
         h, w = raw_image.shape[:2]
         
         # image = cv2.cvtColor(raw_image, cv2.COLOR_BGR2RGB) / 255.0
@@ -217,7 +219,8 @@ class DepthAnythingV2(nn.Module):
         image = transform({'image': image})['image']
         image = torch.from_numpy(image).unsqueeze(0)
         
-        DEVICE = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
+        # DEVICE = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
+        DEVICE=self.device
         image = image.to(DEVICE)
         
         return image, (h, w)
