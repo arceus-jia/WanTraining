@@ -80,11 +80,16 @@ def resize512(height, width):
     return new_height, new_width
 
 
-def handle_single(depth_model, video_path, output_path):
+def handle_single(depth_model, video_path, output_path,skip_existing):
     try:
+
         device = next(depth_model.parameters()).device
         st = time.time()
         print("handle==", video_path, device)
+        if os.path.exist(output_path)
+            print('exists!')
+            if args.skip_existing:
+                return
 
         vr = decord.VideoReader(video_path)
         control_pixels_nd = vr[:]
@@ -140,10 +145,10 @@ def handle_single(depth_model, video_path, output_path):
         traceback.print_exc()
 
 
-def process_batch_videos(depth_model, video_paths):
+def process_batch_videos(depth_model, video_paths,skip_existing):
     for video_path in video_paths:
         output_path = video_path.replace("/train/", "/train_depth/")
-        handle_single(depth_model, video_path, output_path)
+        handle_single(depth_model, video_path, output_path,skip_existing)
         
 def test():
     depth_model = get_depth_model('cuda:0')
@@ -160,6 +165,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input-folder", type=str)
     parser.add_argument("-j", type=int, default=3, help="Num workers")
+    parser.add_argument('--skip-existing', action='store_true', help='Skip generating videos that already exist.')
     args = parser.parse_args()
     # num_workers = args.j
     num_gpus = torch.cuda.device_count()
@@ -189,6 +195,6 @@ if __name__ == "__main__":
             # init detector
             depth_model = depth_models[i % len(gpu_ids)]
 
-            futures.append(executor.submit(process_batch_videos, depth_model, chunk))
+            futures.append(executor.submit(process_batch_videos, depth_model, chunk,args.skip_existing))
         for future in concurrent.futures.as_completed(futures):
             future.result()
