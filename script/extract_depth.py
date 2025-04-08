@@ -86,9 +86,9 @@ def handle_single(depth_model, video_path, output_path,skip_existing):
         device = next(depth_model.parameters()).device
         st = time.time()
         print("handle==", video_path, device)
-        if os.path.exist(output_path)
+        if os.path.exists(output_path):
             print('exists!')
-            if args.skip_existing:
+            if skip_existing:
                 return
 
         vr = decord.VideoReader(video_path)
