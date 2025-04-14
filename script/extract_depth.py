@@ -29,7 +29,8 @@ import concurrent.futures
 
 import numpy as np
 import decord
-# decord.bridge.set_bridge("torch")
+
+use_torch_bridge = False
 
 
 from wan.utils.utils import cache_video
@@ -79,9 +80,10 @@ def resize512(height, width):
 
     return new_height, new_width
 
-
-def handle_single(depth_model, video_path, output_path,skip_existing):
+def handle_single(depth_model, video_path, output_path,skip_existing=False):
     try:
+        if use_torch_bridge:
+            decord.bridge.set_bridge("torch")
 
         device = next(depth_model.parameters()).device
         st = time.time()
@@ -92,13 +94,13 @@ def handle_single(depth_model, video_path, output_path,skip_existing):
                 return
 
         vr = decord.VideoReader(video_path)
-        control_pixels_nd = vr[:]
-        control_pixels_np = control_pixels_nd.asnumpy()
-        f, height, width, _ = control_pixels_np.shape
+        control_pixels = vr[:]
+        
+        f, height, width, _ = control_pixels.shape
         height, width = resize512(height, width)
 
-        # shape: (F, H, W, C)
-        control_pixels = torch.from_numpy(control_pixels_np).float()
+        if not use_torch_bridge:
+            control_pixels = torch.from_numpy(control_pixels.asnumpy())
 
         # (F, H, W, C) -> (F, C, H, W) -> (1, F, C, H, W)
         control_pixels = control_pixels.movedim(3, 1).unsqueeze(0)
