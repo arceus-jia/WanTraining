@@ -37,6 +37,7 @@ from wan.utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
 
 from utils.temp_rng import temp_rng
 from utils.dataset import CombinedDataset
+import cv2
 
 
 def make_dir(base, folder):
@@ -409,7 +410,20 @@ def main(args):
             raise NotImplementedError(f"{args.control_preprocess}")
         
         return control
+
     
+    def save_tensor_image(tensor, filename='tmp.jpg'):
+        tensor = tensor.squeeze(1)  
+        img = tensor.detach().cpu().to(torch.float32).numpy()  # shape: [3, H, W]
+        
+        img = np.transpose(img, (1, 2, 0))
+        img = (img - img.min()) / (img.max() - img.min() + 1e-8) 
+        img = (img * 255).astype(np.uint8)
+
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
+        cv2.imwrite(filename, img)
+
     def prepare_conditions(batch):
         pixels, context, control,media_file = batch
         
@@ -428,6 +442,14 @@ def main(args):
         if args.control_lora:
             if control is not None:
                 control = [p.to(dtype=torch.bfloat16, device=device) for p in control]
+                # control2 = [preprocess_control(p) for p in pixels]
+                # print('control==',control[0].shape)
+                # print('control2==',control2[0].shape)
+                # print('mediafile',media_file)
+                # save_tensor_image(control[0][:,0,:,:],'tmp.jpg')
+                # save_tensor_image(control2[0][:,0,:,:],'tmp2.jpg')
+                # save_tensor_image(pixels[0][:,0,:,:],'tmp3.jpg')
+                # input('x')
             else:
                 control = [preprocess_control(p) for p in pixels]
             control_latents = vae.encode(control)
@@ -777,4 +799,4 @@ if __name__ == "__main__":
 
 #  nohup python -u train_wan_lora.py --dataset /data/datasets/wan/gfp --max_train_steps 150000 --token_limit 6000  --val_steps 1000000 --checkpointing_steps 2000 --lora_rank 128 --control_lora --load_control --control_preprocess pose --base_res 624 > log.txt &
 
-# nohup python -u train_wan_lora.py --dataset /data/datasets/wan/gfp --max_train_steps 150000 --token_limit 6000  --val_steps 1000000 --checkpointing_steps 3000 --lora_rank 128 --control_lora  --control_preprocess depth --base_res 624 > log.txt &
+# nohup python -u train_wan_lora.py --dataset /data/datasets/wan/gfp --max_train_steps 150000 --token_limit 6000  --val_steps 1000000 --checkpointing_steps 3000 --lora_rank 128 --control_lora  --control_preprocess depth --base_res 624 --load_control --output_dir outputs/depth  > log.txt &

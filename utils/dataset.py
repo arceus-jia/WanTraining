@@ -14,6 +14,7 @@ import random
 import numpy as np
 from glob import glob
 from PIL import Image
+import time
 
 from torchvision.transforms import v2, InterpolationMode
 from safetensors.torch import load_file
@@ -120,6 +121,29 @@ class CombinedDataset(Dataset):
             else:
                 return frames
 
+    def set_deterministic_rng_state(self, idx):
+        seed = int(time.time() * 1000) % (2**32) + idx
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+
+    def get_full_rng_state(self):
+        return {
+            'random_state': random.getstate(),
+            'np_state': np.random.get_state(),
+            'torch_state': torch.get_rng_state(),
+            'torch_cuda_state': torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+        }
+    def set_full_rng_state(self,state):
+        random.setstate(state['random_state'])
+        np.random.set_state(state['np_state'])
+        torch.set_rng_state(state['torch_state'])
+        if torch.cuda.is_available() and state['torch_cuda_state'] is not None:
+            torch.cuda.set_rng_state_all(state['torch_cuda_state'])        
+
+
     def get_media_item(self,media_file,width=None, height=None):
         ext = os.path.splitext(media_file)[1].lower()
         if ext in IMAGE_TYPES:
@@ -140,6 +164,7 @@ class CombinedDataset(Dataset):
             # sample a clip from the video based on frame stride and length
             seg_len = min(stride * max_frames, orig_frames)
             start_frame = random.randint(0, orig_frames - seg_len)
+            # print('start_frame==',start_frame)
             pixels = vr[start_frame : start_frame+seg_len : stride]
             max_frames = ((pixels.shape[0] - 1) // 4) * 4 + 1
             pixels = pixels[:max_frames] # clip frames to match vae
@@ -156,11 +181,17 @@ class CombinedDataset(Dataset):
         else:
             crop_width = pixels.shape[2]
             crop_height = pixels.shape[1]
+
+        tmp = vr[0].detach().cpu().numpy()
+        # tmp = np.transpose(tmp, (2, 1, 0)).astype(np.uint8)
+        # Image.fromarray(tmp).save('tmp.jpg')
+        # input('x')
         
         # convert to expected dtype, resolution, shape, and value range
+        # print(crop_height, height)
         transform = v2.Compose([
             v2.ToDtype(torch.float32, scale=True),
-            v2.RandomCrop(size=(crop_height, crop_width)),
+            # v2.RandomCrop(size=(crop_height, crop_width)),
             v2.Resize(size=(height, width)),
         ])
         
@@ -171,12 +202,18 @@ class CombinedDataset(Dataset):
         return pixels,width,height
     
     def __getitem__(self, idx):
+        self.set_deterministic_rng_state(idx)
         media_file = self.media_files[idx]
+        state = self.get_full_rng_state()
+        # print('state==',state)
+        
         pixels,width,height = self.get_media_item(media_file)
+        # print('width,height',width,height)
         
         if self.load_control:
             # raise NotImplementedError("loading control files from disk is not implemented yet")
             control_media_file = media_file.replace('train/','train_control/')
+            self.set_full_rng_state(state)
             control,_,_ = self.get_media_item(control_media_file,width,height)
         else:
             control = None

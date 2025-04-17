@@ -200,3 +200,5 @@ if __name__ == "__main__":
             futures.append(executor.submit(process_batch_videos, depth_model, chunk,args.skip_existing))
         for future in concurrent.futures.as_completed(futures):
             future.result()
+
+# python script/extract_depth.py --input-folder /data/datasets/wan/gfp/ --skip-existing
